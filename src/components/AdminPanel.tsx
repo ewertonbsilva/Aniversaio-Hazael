@@ -23,6 +23,7 @@ export default function AdminPanel({ config, rsvps, onRefreshData, onClose }: Ad
   const [partyTime, setPartyTime] = useState(config.partyTime || "");
   const [address, setAddress] = useState(config.address || "");
   const [rsvpDeadline, setRsvpDeadline] = useState(config.rsvpDeadline || "");
+  const [mainPhoto, setMainPhoto] = useState(config.mainPhoto || "");
   const [savePartyLoading, setSavePartyLoading] = useState(false);
   const [savePartySuccess, setSavePartySuccess] = useState(false);
 
@@ -56,6 +57,7 @@ export default function AdminPanel({ config, rsvps, onRefreshData, onClose }: Ad
       setPartyTime(config.partyTime || "");
       setAddress(config.address || "");
       setRsvpDeadline(config.rsvpDeadline || "");
+      setMainPhoto(config.mainPhoto || "");
       setPixKey(config.pixKey || "");
       setClothingSize(config.clothingSize || "");
       setShoeSize(config.shoeSize || "");
@@ -87,7 +89,8 @@ export default function AdminPanel({ config, rsvps, onRefreshData, onClose }: Ad
           partyDate,
           partyTime,
           address,
-          rsvpDeadline
+          rsvpDeadline,
+          mainPhoto
         })
       });
       if (!response.ok) throw new Error("Erro ao salvar dados");
@@ -153,6 +156,22 @@ export default function AdminPanel({ config, rsvps, onRefreshData, onClose }: Ad
       const reader = new FileReader();
       reader.onloadend = () => {
         setPreviewBase64(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  // Main profile photo loader helper
+  const handleMainPhotoChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 8 * 1024 * 1024) {
+        alert("A foto escolhida é muito pesada! Escolha uma foto menor que 8MB.");
+        return;
+      }
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setMainPhoto(reader.result as string);
       };
       reader.readAsDataURL(file);
     }
@@ -303,11 +322,6 @@ export default function AdminPanel({ config, rsvps, onRefreshData, onClose }: Ad
               🔓 Entrar no Painel
             </button>
           </form>
-
-          <div className="mt-6 text-[11px] text-gray-400 bg-gray-50 border border-gray-100 p-2.5 rounded-2xl leading-relaxed">
-            💡 <strong>Dica dos Bichinhos:</strong> <br />
-            Usuário: <code className="bg-white px-1 py-0.5 rounded text-amber-700">admin</code> / Senha: <code className="bg-white px-1 py-0.5 rounded text-amber-700">hazael1ano</code>
-          </div>
         </div>
       </div>
     );
@@ -502,6 +516,28 @@ export default function AdminPanel({ config, rsvps, onRefreshData, onClose }: Ad
             )}
 
             <form onSubmit={savePartyDetails} className="space-y-4">
+              {/* EDIT FOTO PRINCIPAL DO CONVITE */}
+              <div className="border border-amber-100 p-4 rounded-2xl bg-amber-50/20 flex flex-col items-center gap-3">
+                <span className="text-[10px] font-bold text-gray-500 uppercase self-start">Foto de Capa Principal</span>
+                <div className="w-28 h-28 rounded-full border-4 border-amber-100 outline outline-4 outline-white shadow-md overflow-hidden bg-white">
+                  <img
+                    src={mainPhoto || "/src/assets/images/baby_hazael_portrait_1779399080097.png"}
+                    alt="Foto de Capa do Hazael"
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                <label className="bg-[#0284c7] hover:bg-[#0369a1] text-white font-bold py-1.5 px-3 rounded-lg text-xs cursor-pointer select-none text-center">
+                  📸 Selecionar Nova Foto Principal
+                  <input
+                    type="file"
+                    accept="image/png, image/jpeg"
+                    onChange={handleMainPhotoChange}
+                    className="hidden"
+                  />
+                </label>
+                <p className="text-[9px] text-gray-400 text-center leading-none">A foto de rosto ideal possui formato quadrado (1:1).</p>
+              </div>
+
               <div>
                 <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
                   Data da Festa *

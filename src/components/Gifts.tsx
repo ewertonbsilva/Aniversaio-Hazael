@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import QRCode from "qrcode";
+import { generatePixPayload } from "../utils/pix";
 
 interface GiftsProps {
   clothingSize: string;
@@ -21,6 +23,8 @@ interface Cota {
 
 export default function Gifts({ clothingSize, shoeSize, diaperSize, pixKey }: GiftsProps) {
   const [selectedCota, setSelectedCota] = useState<Cota | null>(null);
+  const [qrDataUrl, setQrDataUrl] = useState<string>("");
+  const [copiaColaString, setCopiaColaString] = useState<string>("");
   const [copied, setCopied] = useState(false);
 
   const cotas: Cota[] = [
@@ -70,8 +74,60 @@ export default function Gifts({ clothingSize, shoeSize, diaperSize, pixKey }: Gi
     }
   ];
 
+  // Extracts float number from Brazilian currency string format
+  const parseAmount = (amountStr: string | null): number | undefined => {
+    if (!amountStr || amountStr === "Qualquer valor") return undefined;
+    const match = amountStr.match(/[\d,.]+/);
+    if (!match) return undefined;
+    const clean = match[0].replace(/\./g, "").replace(",", ".");
+    const val = parseFloat(clean);
+    return isNaN(val) ? undefined : val;
+  };
+
+  useEffect(() => {
+    if (!selectedCota) {
+      setQrDataUrl("");
+      setCopiaColaString("");
+      return;
+    }
+
+    const value = parseAmount(selectedCota.amount);
+    
+    try {
+      // Build authentic BR Code string
+      const payload = generatePixPayload({
+        pixKey: pixKey || "ewerton.bezerra.silva@gmail.com",
+        amount: value,
+        receiverName: "Raiane Oliveira Araujo",
+        receiverCity: "Rio Branco Acre",
+        txId: `COTA${selectedCota.id.toUpperCase()}`
+      });
+
+      setCopiaColaString(payload);
+
+      // Generate standard offline-first QR Code Data URL high-density png
+      QRCode.toDataURL(payload, {
+        width: 320,
+        margin: 2,
+        color: {
+          dark: "#000000",
+          light: "#FFFFFF"
+        }
+      })
+        .then((url) => {
+          setQrDataUrl(url);
+        })
+        .catch((err) => {
+          console.error("Erro ao renderizar QR Code:", err);
+        });
+    } catch (err) {
+      console.error("Erro na geração de dados Pix:", err);
+    }
+  }, [selectedCota, pixKey]);
+
   const handleCopyPix = () => {
-    navigator.clipboard.writeText(pixKey);
+    const textToCopy = copiaColaString || pixKey;
+    navigator.clipboard.writeText(textToCopy);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -166,7 +222,7 @@ export default function Gifts({ clothingSize, shoeSize, diaperSize, pixKey }: Gi
               <h4 className="font-fredoka font-black text-lg text-[#854D0E] mb-0.5">
                 {selectedCota.title}
               </h4>
-              <p className="text-[10px] uppercase font-bold tracking-wider text-orange-650 mb-2">
+              <p className="text-[10px] uppercase font-bold tracking-wider text-amber-700 mb-2">
                 Cota do {selectedCota.character}
               </p>
 
@@ -177,69 +233,54 @@ export default function Gifts({ clothingSize, shoeSize, diaperSize, pixKey }: Gi
                     Sugestão de valor: {selectedCota.amount}
                   </p>
                 )}
+                <div className="mt-1 text-[9px] text-[#854D0E]/70 border-t border-[#FEF08A]/20 pt-1">
+                  <strong>Beneficiária:</strong> Raiane Oliveira Araujo <br />
+                  <strong>Cidade:</strong> Rio Branco - AC
+                </div>
               </div>
 
               {/* QR Code Graphic Representation */}
-              <div className="bg-[#FEF08A]/10 p-4 rounded-3xl max-w-[180px] mx-auto border-2 border-dashed border-[#FEF08A]/30 mb-4 flex flex-col items-center">
-                <div className="bg-white p-2.5 rounded-2xl shadow-xs border border-gray-100">
-                  {/* Generated QR representation using CSS/canvas/svg */}
-                  <svg className="w-32 h-32 text-gray-900" viewBox="0 0 100 100" fill="currentColor">
-                    <rect x="0" y="0" width="25" height="25" />
-                    <rect x="5" y="5" width="15" height="15" fill="white" />
-                    <rect x="9" y="9" width="7" height="7" />
-                    
-                    <rect x="75" y="0" width="25" height="25" />
-                    <rect x="80" y="5" width="15" height="15" fill="white" />
-                    <rect x="84" y="9" width="7" height="7" />
-
-                    <rect x="0" y="75" width="25" height="25" />
-                    <rect x="5" y="80" width="15" height="15" fill="white" />
-                    <rect x="9" y="84" width="7" height="7" />
-
-                    {/* Simulating random QR codes pixels */}
-                    <rect x="35" y="5" width="5" height="15" />
-                    <rect x="45" y="0" width="10" height="5" />
-                    <rect x="60" y="10" width="5" height="20" />
-                    <rect x="35" y="30" width="20" height="5" />
-                    <rect x="10" y="35" width="15" height="10" />
-                    <rect x="5" y="50" width="20" height="5" />
-                    
-                    <rect x="30" y="45" width="15" height="5" />
-                    <rect x="50" y="40" width="10" height="15" />
-                    <rect x="65" y="45" width="25" height="10" />
-                    <rect x="80" y="30" width="15" height="5" />
-                    <rect x="75" y="60" width="5" height="10" />
-
-                    <rect x="35" y="65" width="25" height="5" />
-                    <rect x="30" y="75" width="5" height="15" />
-                    <rect x="45" y="80" width="10" height="10" />
-                    <rect x="60" y="75" width="15" height="5" />
-                    <rect x="65" y="85" width="30" height="5" />
-                    <rect x="80" y="70" width="10" height="10" />
-                  </svg>
+              <div className="bg-[#FEF08A]/10 p-4 rounded-3xl max-w-[180px] mx-auto border-2 border-dashed border-[#FEF08A]/30 mb-4 flex flex-col items-center justify-center">
+                <div className="bg-white p-2.5 rounded-2xl shadow-xs border border-gray-100 w-36 h-36 flex items-center justify-center">
+                  {qrDataUrl ? (
+                    <img
+                      src={qrDataUrl}
+                      alt="Código QR PIX"
+                      className="w-full h-full object-contain select-none pointer-events-none"
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center justify-center space-y-2 text-gray-400">
+                      <div className="w-5 h-5 border-2 border-[#EA580C] border-t-transparent rounded-full animate-spin" />
+                      <span className="text-[9px]">Gerando código...</span>
+                    </div>
+                  )}
                 </div>
                 <span className="text-[9px] text-[#854D0E] font-bold mt-2 tracking-wider">QR CODE DE PAGAMENTO PIX</span>
               </div>
 
               {/* PIX string display */}
-              <div className="bg-gray-100 rounded-2xl p-2.5 flex items-center justify-between text-[11px] gap-2 text-left mb-4">
-                <div className="truncate text-gray-700 font-mono select-all">
-                  <strong>Chave PIX:</strong> {pixKey}
+              <div className="bg-gray-100 rounded-2xl p-2.5 flex flex-col gap-1.5 text-[11px] text-left mb-4">
+                <div className="text-gray-600 font-sans leading-tight">
+                  <span className="font-bold text-[#854D0E]">Copia e Cola Pix:</span>
+                </div>
+                <div className="bg-white rounded-lg p-2 select-all font-mono text-[9px] break-all border border-gray-150 max-h-[55px] overflow-y-auto leading-normal text-gray-700">
+                  {copiaColaString || "Carregando código..."}
                 </div>
                 <button
                   onClick={handleCopyPix}
-                  className={`py-1.5 px-3 rounded-xl font-bold font-sans tracking-wide uppercase shrink-0 transition-colors text-[10px] cursor-pointer ${
+                  disabled={!copiaColaString}
+                  className={`py-2 px-3 rounded-xl font-bold font-sans tracking-wide uppercase transition-colors text-[10px] cursor-pointer w-full text-center ${
                     copied 
                       ? "bg-emerald-500 text-white" 
-                      : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+                      : "bg-[#EA580C] hover:bg-[#d94e08] text-white"
                   }`}
                 >
-                  {copied ? "Copiado!" : "Copiar"}
+                  {copied ? "✓ Código Copiado!" : "Copiar Código Copia e Cola"}
                 </button>
               </div>
 
               <p className="text-[10px] text-gray-500 leading-relaxed font-sans max-w-[250px] mx-auto">
-                💡 <strong>Como pagar:</strong> Abra o aplicativo do seu banco, selecione <strong>Área PIX</strong> e escaneie o código acima ou faça um Pix usando a <strong>Chave Pix Copiada</strong>.
+                💡 <strong>Como pagar:</strong> Abra o aplicativo do seu banco, selecione <strong>Área PIX</strong>, escolha <strong>Pix Copia e Cola</strong> (ou escaneie o QR Code) e cole o código copiado.
               </p>
             </div>
           </div>

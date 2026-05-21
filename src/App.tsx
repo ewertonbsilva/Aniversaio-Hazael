@@ -94,37 +94,37 @@ export default function App() {
         <span className="absolute top-[90%] right-[8%] text-2xl animate-float-delayed opacity-40">🎈</span>
       </div>
 
-      {/* CORE WRAPPER CONTROLLING THE DUAL-COLUMN GEOMETRIC BALANCE GRID */}
-      <div className="w-full max-w-6xl mx-auto px-4 py-6 sm:py-10 relative z-10 flex flex-col md:flex-row gap-8 items-start">
+      {/* CORE WRAPPER CONTROLLING THE MOBILE CONTAINER FLOW */}
+      <div className="w-full max-w-md mx-auto px-4 py-6 relative z-10 flex flex-col gap-6 items-center">
         
         {/* ==========================================================
-            COLUNA ESQUERDA: PERFIL HERO CARD (STICKY)
+            SEÇÃO HERO CARD DO BEBÊ
             ========================================================== */}
-        <section id="home-section" className="w-full md:w-[380px] bg-[#E0F2FE] rounded-[48px] border-8 border-white shadow-xl relative flex flex-col items-center p-6 sm:p-8 overflow-hidden shrink-0 md:sticky md:top-8">
+        <section id="home-section" className="w-full bg-[#E0F2FE] rounded-[48px] border-8 border-white shadow-xl relative flex flex-col items-center p-6 overflow-hidden shrink-0">
           {/* Ambient glowing blobs */}
           <div className="absolute -top-10 -left-10 w-40 h-40 bg-white/40 rounded-full blur-2xl pointer-events-none" />
           <div className="absolute top-20 -right-10 w-32 h-32 bg-[#FEF08A]/50 rounded-full blur-xl pointer-events-none" />
           
           <div className="relative z-10 text-center mb-6">
             <p className="text-[#0369A1] font-bold tracking-widest text-xs uppercase mb-1.5">Hazael Oliveira Silva</p>
-            <h1 className="text-3xl sm:text-4xl font-fredoka font-black text-[#0369A1] leading-tight drop-shadow-xs">
+            <h1 className="text-3xl font-fredoka font-black text-[#0369A1] leading-tight drop-shadow-xs">
               O que é que há,<br />velhinho? 🥕✨
             </h1>
           </div>
 
-          <div className="relative w-52 h-52 sm:w-56 sm:h-56 mb-8 select-none z-10">
+          <div className="relative w-52 h-52 mb-6 select-none z-10">
             <div className="absolute inset-0 bg-white rounded-full shadow-inner flex items-center justify-center overflow-hidden border-4 border-[#BAE6FD]">
               <img
-                src={config.photos?.[0]?.url || "/src/assets/images/baby_hazael_portrait_1779399080097.png"}
+                src={config.mainPhoto || config.photos?.[0]?.url || "/src/assets/images/baby_hazael_portrait_1779399080097.png"}
                 alt="Nosso Baby Hazael"
                 referrerPolicy="no-referrer"
                 className="w-full h-full object-cover"
               />
             </div>
-            <div className="absolute -bottom-2 -right-2 w-16 h-16 sm:w-20 sm:h-20 bg-[#FEF08A] rounded-full flex items-center justify-center border-4 border-white shadow-lg text-2xl sm:text-3xl animate-float">
+            <div className="absolute -bottom-2 -right-2 w-16 h-16 bg-[#FEF08A] rounded-full flex items-center justify-center border-4 border-white shadow-lg text-2xl animate-float">
               🎂
             </div>
-            <div className="absolute -top-2 -left-2 w-12 h-12 sm:w-16 sm:h-16 bg-[#FFEDD5] rounded-full flex items-center justify-center border-4 border-white shadow-lg text-xl sm:text-2xl animate-float-delayed">
+            <div className="absolute -top-2 -left-2 w-12 h-12 bg-[#FFEDD5] rounded-full flex items-center justify-center border-4 border-white shadow-lg text-xl animate-float-delayed">
               ✨
             </div>
           </div>
@@ -137,17 +137,17 @@ export default function App() {
             />
           </div>
 
-          <div className="mt-6 md:mt-auto text-center z-10">
-            <p className="text-[#0369A1] italic text-xs sm:text-sm font-semibold max-w-[280px] mx-auto leading-relaxed">
+          <div className="mt-6 text-center z-10">
+            <p className="text-[#0369A1] italic text-xs font-semibold max-w-[280px] mx-auto leading-relaxed">
               "Segurem os corações, a fofura de 1 aninho está prestes a começar!"
             </p>
           </div>
         </section>
 
         {/* ==========================================================
-            COLUNA DIREITA: CONTEÚDOS E SEÇÕES INTERATIVAS
+            CONTEÚDOS E SEÇÕES INTERATIVAS EM FORMULÁRIO VERTICAL ÚNICO
             ========================================================== */}
-        <div className="flex-1 w-full flex flex-col gap-8">
+        <div className="w-full flex flex-col gap-6">
           
           {/* ==========================================================
               SEÇÃO: ONDE E QUANDO (A FESTA - TURQUESA)

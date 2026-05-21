@@ -14,6 +14,7 @@ export interface PartyConfig {
   diaperSize: string;
   pixKey: string;
   photos: PhotoItem[];
+  mainPhoto?: string;
 }
 
 export interface RsvpEntry {
