@@ -1,0 +1,49 @@
+{
+  "config": {
+    "partyDate": "2026-07-25",
+    "partyTime": "18:00",
+    "address": "R. Major Martins, 208 - Parque dos Sabiás, Rio Branco - AC, 69903-007",
+    "rsvpDeadline": "2026-07-01",
+    "clothingSize": "1 ou 2",
+    "shoeSize": "19",
+    "diaperSize": "XG",
+    "pixKey": "ewerton.bezerra.silva@gmail.com",
+    "photos": [
+      {
+        "id": "1",
+        "url": "/src/assets/images/baby_hazael_portrait_1779399080097.png",
+        "caption": "Hazael Oliveira Silva - 1 Aninho"
+      },
+      {
+        "id": "2",
+        "url": "https://images.unsplash.com/photo-1519689680058-324335c77eba?w=500&q=80",
+        "caption": "Nosso baby espalhando gargalhadas"
+      },
+      {
+        "id": "3",
+        "url": "https://images.unsplash.com/photo-1596464716127-f2a82984de30?w=500&q=80",
+        "caption": "O carinho de cada pequena descoberta"
+      }
+    ]
+  },
+  "rsvps": [
+    {
+      "id": "1",
+      "name": "Ewerton Bezerra (Exemplo)",
+      "isAttending": true,
+      "adults": 2,
+      "children": 1,
+      "childrenAges": "Lucas 3 anos",
+      "createdAt": "2026-05-21T18:00:00.000Z"
+    },
+    {
+      "id": "2",
+      "name": "Vovó Maria (Exemplo)",
+      "isAttending": true,
+      "adults": 1,
+      "children": 0,
+      "childrenAges": "",
+      "createdAt": "2026-05-21T19:30:00.000Z"
+    }
+  ]
+}

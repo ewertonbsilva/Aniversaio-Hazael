@@ -1,0 +1,6 @@
+{
+  "name": "Convite do Hazael",
+  "description": "Convite virtual interativo e painel de controle para a festa de 1 aninho do Hazael com o tema Baby Looney Tunes.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
