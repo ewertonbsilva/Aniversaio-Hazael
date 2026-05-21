@@ -85,7 +85,7 @@ export default function Gallery({ photos }: GalleryProps) {
                   className="w-full h-full object-cover"
                 />
                 <div className="absolute top-2.5 left-2.5 bg-[#FEF08A] rounded-full py-0.5 px-2.5 text-[9px] uppercase tracking-wider font-black text-[#854D0E] shadow-sm border border-white">
-                  Mês {i + 1}
+                  {photo.month || `Mês ${i + 1}`}
                 </div>
               </div>
               

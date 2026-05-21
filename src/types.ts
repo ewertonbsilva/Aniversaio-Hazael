@@ -2,6 +2,7 @@ export interface PhotoItem {
   id: string;
   url: string; // can be static URL, external URL or base64 data string
   caption: string;
+  month?: string;
 }
 
 export interface PartyConfig {

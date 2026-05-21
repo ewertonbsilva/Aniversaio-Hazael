@@ -2,6 +2,27 @@ import express from "express";
 import path from "path";
 import fs from "fs";
 import { createServer as createViteServer } from "vite";
+import { GoogleGenAI } from "@google/genai";
+
+// Initialize Gemini client lazily
+let ai: GoogleGenAI | null = null;
+function getGeminiClient(): GoogleGenAI {
+  if (!ai) {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      throw new Error("GEMINI_API_KEY is not defined in the environment.");
+    }
+    ai = new GoogleGenAI({
+      apiKey: apiKey,
+      httpOptions: {
+        headers: {
+          "User-Agent": "aistudio-build",
+        },
+      },
+    });
+  }
+  return ai;
+}
 
 const app = express();
 const PORT = 3000;
@@ -128,7 +149,7 @@ app.delete("/api/rsvps/:id", (req, res) => {
 
 // POST Photo upload (Base64)
 app.post("/api/photos", (req, res) => {
-  const { url, caption } = req.body;
+  const { url, caption, month } = req.body;
   if (!url) {
     return res.status(400).json({ error: "URL ou conteúdo da imagem em base64 é necessário." });
   }
@@ -137,7 +158,8 @@ app.post("/api/photos", (req, res) => {
   const newPhoto = {
     id: Date.now().toString(),
     url: url, // Contains base64 Data URL
-    caption: (caption || "").trim() || "Nova foto do Hazael!"
+    caption: (caption || "").trim() || "Nova foto do Hazael!",
+    month: month || "Geral"
   };
 
   db.config.photos = db.config.photos || [];
@@ -145,6 +167,70 @@ app.post("/api/photos", (req, res) => {
   writeDB(db);
 
   res.status(201).json({ success: true, photo: newPhoto });
+});
+
+// POST AI Caption generator from Image Base64 (Using Gemini 3.5 Flash server-side)
+app.post("/api/photos/ai-caption", async (req, res) => {
+  const { url, month } = req.body;
+
+  if (!url) {
+    return res.status(400).json({ error: "O conteúdo da imagem em base64 é necessário." });
+  }
+
+  // Gracefully handle missing GEMINI_API_KEY
+  if (!process.env.GEMINI_API_KEY) {
+    return res.status(500).json({
+      error: "O serviço de Inteligência Artificial do Google Gemini não está configurado. Por favor, cadastre a GEMINI_API_KEY nas Configurações (Secrets)."
+    });
+  }
+
+  try {
+    const aiClient = getGeminiClient();
+
+    // Extract raw base64 data and mimeType
+    let base64Data = url;
+    let mimeType = "image/jpeg";
+    if (base64Data.startsWith("data:")) {
+      const mimeMatch = base64Data.match(/^data:([^;]+);base64,/);
+      if (mimeMatch) {
+         mimeType = mimeMatch[1];
+      }
+      const commaIndex = base64Data.indexOf(",");
+      if (commaIndex !== -1) {
+         base64Data = base64Data.substring(commaIndex + 1);
+      }
+    }
+
+    const promptText = `Você é um assistente simpático especializado em criar legendas curtas, fofas, afetivas e altamente personalizadas para as fotos do mural de crescimento do bebê Hazael Oliveira Silva (que está completando 1 aninho).
+    O usuário selecionou uma foto e associou ao período/mês de crescimento: "${month || "Geral"}".
+    
+    Analise a imagem anexada (repare na sua fofura, expressão, o que ele está fazendo, roupinhas ou brinquedos envolvidos) e escreva uma legenda calorosa em formato de frase curta sob a perspectiva do olhar orgulhoso e bobo dos pais, ou como um recadinho fofo.
+    
+    REGRAS RÍGIDAS DE GERAÇÃO:
+    - Retorne apenas a legenda gerada puro texto, SEM aspas ao redor, sem cabeçalhos ou explicações adicionais.
+    - O texto gerado deve ter no máximo 1 ou 2 frases curtas (máximo 120 caracteres totais) para caber bem no card.
+    - Se o período for diferente de "Geral", faça uma referência carinhosa a essa fase (ex: se for '3º mês', fale sobre 'com 3 meses', 'nossos 3 mesinhos', etc.).
+    - Escreva estritamente em português (do Brasil). Use emojis condizentes de forma fofinha.`;
+
+    const response = await aiClient.models.generateContent({
+      model: "gemini-3.5-flash",
+      contents: [
+        {
+          inlineData: {
+            mimeType: mimeType,
+            data: base64Data,
+          },
+        },
+        promptText,
+      ],
+    });
+
+    const caption = response.text ? response.text.trim() : "Sorriso inesquecível do nosso Baby Hazael! ✨";
+    res.json({ success: true, caption });
+  } catch (error: any) {
+    console.error("Erro ao gerar legenda com Gemini:", error);
+    res.status(500).json({ error: "Erro ao consultar a IA da Google: " + error.message });
+  }
 });
 
 // DELETE Photo

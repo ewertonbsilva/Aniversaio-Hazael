@@ -49,6 +49,8 @@ export default function AdminPanel({ config, rsvps, onRefreshData, onClose }: Ad
   const [newPhotoCaption, setNewPhotoCaption] = useState("");
   const [previewBase64, setPreviewBase64] = useState<string | null>(null);
   const [photoUploadLoading, setPhotoUploadLoading] = useState(false);
+  const [selectedMonth, setSelectedMonth] = useState("Geral");
+  const [isAiGeneratingCaption, setIsAiGeneratingCaption] = useState(false);
 
   // Refresh local states when config prop changes
   useEffect(() => {
@@ -191,18 +193,49 @@ export default function AdminPanel({ config, rsvps, onRefreshData, onClose }: Ad
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           url: previewBase64,
-          caption: newPhotoCaption.trim() || "Sorriso do Hazael!"
+          caption: newPhotoCaption.trim() || "Sorriso do Hazael!",
+          month: selectedMonth
         })
       });
       if (!response.ok) throw new Error("Erro ao enviar foto");
       setPreviewBase64(null);
       setNewPhotoCaption("");
+      setSelectedMonth("Geral");
       onRefreshData();
-      alert("Foto adicionada à linha do tempo com sucesso!");
+      alert("Foto adicionada ao mural com sucesso!");
     } catch (err) {
       alert("Erro ao enviar foto. Tente uma imagem mais leve.");
     } finally {
       setPhotoUploadLoading(false);
+    }
+  };
+
+  // Generate Caption with Gemini AI
+  const handleGenerateAiCaption = async () => {
+    if (!previewBase64) {
+      alert("Selecione ou arraste uma foto primeiro para que a inteligência artificial possa analisá-la!");
+      return;
+    }
+    setIsAiGeneratingCaption(true);
+    try {
+      const response = await fetch("/api/photos/ai-caption", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          url: previewBase64,
+          month: selectedMonth
+        })
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.error || "Erro desconhecido ao gerar legenda.");
+      }
+      setNewPhotoCaption(data.caption);
+    } catch (error: any) {
+      console.error("Erro ao gerar legenda:", error);
+      alert(error.message || "Não foi possível gerar a legenda automática.");
+    } finally {
+      setIsAiGeneratingCaption(false);
     }
   };
 
@@ -737,6 +770,59 @@ export default function AdminPanel({ config, rsvps, onRefreshData, onClose }: Ad
                   )}
                 </div>
 
+                {/* Dropdown for Month Selection & AI Captions Trigger */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">
+                      🗓 Selecionar Período / Mês
+                    </label>
+                    <select
+                      value={selectedMonth}
+                      onChange={(e) => setSelectedMonth(e.target.value)}
+                      className="w-full bg-white border border-slate-200 text-gray-800 rounded-xl py-2 px-3 focus:outline-none focus:ring-1 focus:ring-yellow-300 text-xs font-semibold"
+                    >
+                      <option value="Geral">Mural Geral / Outro</option>
+                      <option value="Recém-nascido">Recém-nascido</option>
+                      <option value="1º mês">1º mês</option>
+                      <option value="2º mês">2º mês</option>
+                      <option value="3º mês">3º mês</option>
+                      <option value="4º mês">4º mês</option>
+                      <option value="5º mês">5º mês</option>
+                      <option value="6º mês">6º mês</option>
+                      <option value="7º mês">7º mês</option>
+                      <option value="8º mês">8º mês</option>
+                      <option value="9º mês">9º mês</option>
+                      <option value="10º mês">10º mês</option>
+                      <option value="11º mês">11º mês</option>
+                      <option value="12º mês (1 ano)">12º mês (1 ano)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">
+                      🤖 Gerar Inteligente
+                    </label>
+                    <button
+                      type="button"
+                      disabled={isAiGeneratingCaption || !previewBase64}
+                      onClick={handleGenerateAiCaption}
+                      className="w-full shrink-0 flex items-center justify-center gap-1.5 bg-gradient-to-r from-amber-400 to-yellow-400 hover:from-amber-500 hover:to-yellow-500 active:scale-95 text-amber-950 py-2.5 px-3 rounded-xl font-bold text-[11px] uppercase cursor-pointer disabled:opacity-40 transition-all border-none font-sans shadow-sm"
+                    >
+                      {isAiGeneratingCaption ? (
+                        <span className="flex items-center gap-1.5">
+                          <svg className="animate-spin h-3.5 w-3.5 text-amber-950" viewBox="0 0 24 24" fill="none">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 00 5.373 5.373 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                          </svg>
+                          IA Analisando...
+                        </span>
+                      ) : (
+                        <>✨ Gerar Legenda com IA</>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
                 <div>
                   <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">
                     Legenda da Imagem
@@ -746,14 +832,17 @@ export default function AdminPanel({ config, rsvps, onRefreshData, onClose }: Ad
                     value={newPhotoCaption}
                     onChange={(e) => setNewPhotoCaption(e.target.value)}
                     placeholder="Ex: 5 Meses - Aprendendo a engatinhar!"
-                    className="w-full bg-white border border-slate-200 text-gray-800 rounded-xl py-2 px-3 focus:outline-none focus:ring-1 focus:ring-yellow-300 text-xs font-semibold"
+                    className="w-full bg-white border border-slate-200 text-gray-800 rounded-xl py-2.5 px-3.5 focus:outline-none focus:ring-1 focus:ring-yellow-300 text-xs font-semibold"
                   />
+                  <span className="text-[10px] text-gray-400 mt-1 block">
+                    💡 Selecione a foto, escolha o período acima e clique em <strong>✨ Gerar Legenda com IA</strong> para criar uma legenda fofa automaticamente!
+                  </span>
                 </div>
 
                 <button
                   type="submit"
                   disabled={photoUploadLoading || !previewBase64}
-                  className="w-full bg-[#10b981] hover:bg-[#059669] text-white py-2 px-4 rounded-xl font-bold font-sans text-xs uppercase tracking-wide disabled:opacity-40 cursor-pointer"
+                  className="w-full bg-[#10b981] hover:bg-[#059669] text-white py-2.5 px-4 rounded-xl font-bold font-sans text-xs uppercase tracking-wide disabled:opacity-40 cursor-pointer"
                 >
                   {photoUploadLoading ? "Fazendo Upload..." : "📤 Adicionar Foto ao Mural"}
                 </button>
@@ -766,13 +855,16 @@ export default function AdminPanel({ config, rsvps, onRefreshData, onClose }: Ad
                   {config.photos && config.photos.length > 0 ? (
                     config.photos.map((pic) => (
                       <div key={pic.id} className="bg-slate-50 border border-slate-100 rounded-xl p-2.5 flex flex-col justify-between relative group">
-                        <div className="w-full h-24 bg-gray-100 rounded-lg overflow-hidden border border-slate-200">
+                        <div className="w-full h-24 bg-gray-100 rounded-lg overflow-hidden border border-slate-200 relative">
                           <img
                             src={pic.url}
                             alt={pic.caption}
                             referrerPolicy="no-referrer"
                             className="w-full h-full object-cover"
                           />
+                          <div className="absolute bottom-1 right-1 bg-amber-400 text-amber-950 px-2 py-0.5 rounded-full text-[8.5px] uppercase font-black tracking-wider shadow-sm border border-white">
+                            {pic.month || "Geral"}
+                          </div>
                         </div>
                         <p className="text-[11px] font-semibold text-gray-700 leading-tight truncate mt-2 font-sans">
                           {pic.caption}
