@@ -37,6 +37,10 @@ export default function App() {
     loadData();
   }, []);
 
+  useEffect(() => {
+    document.title = "Aniversário do Hazael";
+  }, []);
+
   // Helper inside PT-BR for party date
   const formatPartyDateLong = (dateStr: string) => {
     if (!dateStr) return "";

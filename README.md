@@ -1,20 +1,103 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# Aniversário do Hazael
 
-# Run and deploy your AI Studio app
+Convite interativo para o primeiro aniversário do Hazael, com visual temático, confirmação de presença, mural de fotos e painel administrativo autenticado com Supabase.
 
-This contains everything you need to run your app locally.
+## O que o app faz
 
-View your app in AI Studio: https://ai.studio/apps/a7566740-b443-4e6a-8528-c89ff5815bf1
+- Exibe o convite com data, hora, local e atalhos para mapa.
+- Permite confirmar presença pelo formulário RSVP.
+- Mostra tamanhos sugeridos e chave PIX para presentes.
+- Renderiza um mural de fotos do Hazael.
+- Possui painel dos pais para:
+  - editar dados da festa
+  - atualizar foto principal
+  - gerenciar PIX e tamanhos
+  - adicionar, editar e remover fotos do mural
+  - exportar confirmações
 
-## Run Locally
+## Stack
 
-**Prerequisites:**  Node.js
+- `React 19`
+- `Vite`
+- `Express`
+- `Supabase`
+- `Tailwind CSS`
+- `Google Gemini` para sugestão de legenda de fotos
 
+## Ambiente
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+Crie um arquivo `.env.local` com:
+
+```env
+GEMINI_API_KEY="sua_chave_gemini"
+SUPABASE_URL="https://seu-projeto.supabase.co"
+SUPABASE_PUBLISHABLE_KEY="sb_publishable_xxx"
+SUPABASE_SERVICE_ROLE_KEY="seu_service_role_key_opcional"
+VITE_SUPABASE_URL="https://seu-projeto.supabase.co"
+VITE_SUPABASE_PUBLISHABLE_KEY="sb_publishable_xxx"
+```
+
+Notas:
+
+- `VITE_SUPABASE_URL` e `VITE_SUPABASE_PUBLISHABLE_KEY` são usados no login do painel via browser.
+- `SUPABASE_SERVICE_ROLE_KEY` é opcional, mas recomendado para operações administrativas no backend.
+- Sem `GEMINI_API_KEY`, o recurso de legenda automática por IA não funciona.
+
+## Rodando localmente
+
+1. Instale as dependências:
+
+```bash
+npm install
+```
+
+2. Inicie o servidor de desenvolvimento:
+
+```bash
+npm run dev
+```
+
+3. Abra:
+
+```text
+http://localhost:3000
+```
+
+## Scripts
+
+```bash
+npm run dev
+npm run lint
+npm run build
+npm run start
+```
+
+## Painel administrativo
+
+O acesso ao painel é autenticado com `Supabase Auth` por e-mail e senha.
+
+Atualmente os acessos configurados são:
+
+- `ewerton.bezerra@hotmail.com`
+- `oliveiraaraiane565@gmail.com`
+
+## Estrutura principal
+
+- [src/App.tsx](/C:/APPs/Aniversario%20Hazael/src/App.tsx): experiência pública do convite
+- [src/components/AdminPanel.tsx](/C:/APPs/Aniversario%20Hazael/src/components/AdminPanel.tsx): painel administrativo
+- [src/components/Gallery.tsx](/C:/APPs/Aniversario%20Hazael/src/components/Gallery.tsx): mural de fotos
+- [server.ts](/C:/APPs/Aniversario%20Hazael/server.ts): API Express e integração com Supabase
+- [src/lib/supabase.ts](/C:/APPs/Aniversario%20Hazael/src/lib/supabase.ts): cliente Supabase do frontend
+
+## Supabase esperado
+
+O app depende destas tabelas no schema `public`:
+
+- `party_config`
+- `party_photos`
+- `party_rsvps`
+
+Também usa:
+
+- `Supabase Auth` para login no painel
+- `Supabase Storage` para armazenar as imagens do mural

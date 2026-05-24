@@ -1,11 +1,55 @@
-import express from "express";
+import express, { type NextFunction, type Request, type Response } from "express";
 import path from "path";
-import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import dotenv from "dotenv";
 
-// Initialize Gemini client lazily
+dotenv.config({ path: ".env.local" });
+dotenv.config();
+
+type ConfigRow = {
+  id: string;
+  party_date: string;
+  party_time: string;
+  address: string;
+  rsvp_deadline: string;
+  clothing_size: string;
+  shoe_size: string;
+  diaper_size: string;
+  pix_key: string;
+  main_photo_url: string | null;
+};
+
+type PhotoRow = {
+  id: string;
+  url: string;
+  caption: string;
+  month: string | null;
+  storage_path: string | null;
+  sort_order: number;
+};
+
+type RsvpRow = {
+  id: string;
+  name: string;
+  is_attending: boolean;
+  adults: number;
+  children: number;
+  children_ages: string | null;
+  created_at: string;
+};
+
 let ai: GoogleGenAI | null = null;
+let supabase: SupabaseClient | null = null;
+
+type AuthenticatedRequest = Request & {
+  supabaseUser?: {
+    id: string;
+    email?: string;
+  };
+};
+
 function getGeminiClient(): GoogleGenAI {
   if (!ai) {
     const apiKey = process.env.GEMINI_API_KEY;
@@ -13,7 +57,7 @@ function getGeminiClient(): GoogleGenAI {
       throw new Error("GEMINI_API_KEY is not defined in the environment.");
     }
     ai = new GoogleGenAI({
-      apiKey: apiKey,
+      apiKey,
       httpOptions: {
         headers: {
           "User-Agent": "aistudio-build",
@@ -24,251 +68,531 @@ function getGeminiClient(): GoogleGenAI {
   return ai;
 }
 
+function getSupabaseClient(): SupabaseClient {
+  if (!supabase) {
+    const url = process.env.SUPABASE_URL;
+    const key =
+      process.env.SUPABASE_SERVICE_ROLE_KEY ||
+      process.env.SUPABASE_PUBLISHABLE_KEY ||
+      process.env.SUPABASE_ANON_KEY;
+
+    if (!url || !key) {
+      throw new Error(
+        "SUPABASE_URL and one of SUPABASE_SERVICE_ROLE_KEY, SUPABASE_PUBLISHABLE_KEY, or SUPABASE_ANON_KEY must be defined.",
+      );
+    }
+
+    supabase = createClient(url, key, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+      },
+    });
+  }
+  return supabase;
+}
+
+function getSupabaseAuthClient(accessToken: string): SupabaseClient {
+  const url = process.env.SUPABASE_URL;
+  const key = process.env.SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY;
+
+  if (!url || !key) {
+    throw new Error("SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY or SUPABASE_ANON_KEY must be defined.");
+  }
+
+  return createClient(url, key, {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+    },
+    global: {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    },
+  });
+}
+
+function isDataUrl(value: string | null | undefined): value is string {
+  return Boolean(value && value.startsWith("data:"));
+}
+
+function parseDataUrl(dataUrl: string) {
+  const match = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+  if (!match) {
+    throw new Error("Invalid base64 image payload.");
+  }
+
+  const [, mimeType, base64Data] = match;
+  const extension = mimeType.split("/")[1] || "jpg";
+  return {
+    mimeType,
+    extension,
+    buffer: Buffer.from(base64Data, "base64"),
+  };
+}
+
+function normalizePublicUrl(publicUrl: string) {
+  return publicUrl.replace(/([^:]\/)\/+/g, "$1");
+}
+
+async function uploadDataUrlImage(dataUrl: string, folder: "main" | "gallery") {
+  const { mimeType, extension, buffer } = parseDataUrl(dataUrl);
+  const objectPath = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2, 10)}.${extension}`;
+  const client = getSupabaseClient();
+
+  const { error } = await client.storage
+    .from("party-photos")
+    .upload(objectPath, buffer, {
+      contentType: mimeType,
+      upsert: false,
+    });
+
+  if (error) {
+    throw new Error(`Storage upload failed: ${error.message}`);
+  }
+
+  const { data } = client.storage.from("party-photos").getPublicUrl(objectPath);
+  return {
+    path: objectPath,
+    publicUrl: normalizePublicUrl(data.publicUrl),
+  };
+}
+
+async function removeStoredPhoto(storagePath: string | null) {
+  if (!storagePath) {
+    return;
+  }
+
+  const { error } = await getSupabaseClient().storage.from("party-photos").remove([storagePath]);
+  if (error) {
+    console.error("Failed to remove storage object:", error.message);
+  }
+}
+
+async function replaceStoredPhoto(existingStoragePath: string | null, nextUrl: string | undefined) {
+  if (!nextUrl || !isDataUrl(nextUrl)) {
+    return {
+      publicUrl: nextUrl,
+      storagePath: existingStoragePath,
+    };
+  }
+
+  const uploaded = await uploadDataUrlImage(nextUrl, "gallery");
+  await removeStoredPhoto(existingStoragePath);
+  return {
+    publicUrl: uploaded.publicUrl,
+    storagePath: uploaded.path,
+  };
+}
+
+async function fetchConfig() {
+  const client = getSupabaseClient();
+  const [{ data: configRow, error: configError }, { data: photoRows, error: photoError }] = await Promise.all([
+    client.from("party_config").select("*").eq("id", "primary").maybeSingle<ConfigRow>(),
+    client.from("party_photos").select("*").order("sort_order", { ascending: true }).returns<PhotoRow[]>(),
+  ]);
+
+  if (configError) {
+    throw new Error(configError.message);
+  }
+  if (photoError) {
+    throw new Error(photoError.message);
+  }
+  if (!configRow) {
+    throw new Error("party_config row 'primary' was not found.");
+  }
+
+  return {
+    partyDate: configRow.party_date,
+    partyTime: configRow.party_time,
+    address: configRow.address,
+    rsvpDeadline: configRow.rsvp_deadline,
+    clothingSize: configRow.clothing_size,
+    shoeSize: configRow.shoe_size,
+    diaperSize: configRow.diaper_size,
+    pixKey: configRow.pix_key,
+    mainPhoto: configRow.main_photo_url || undefined,
+    photos: (photoRows || []).map((photo) => ({
+      id: photo.id,
+      url: photo.url,
+      caption: photo.caption,
+      month: photo.month || undefined,
+    })),
+  };
+}
+
+async function fetchRsvps() {
+  const { data, error } = await getSupabaseClient()
+    .from("party_rsvps")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .returns<RsvpRow[]>();
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return (data || []).map((rsvp) => ({
+    id: rsvp.id,
+    name: rsvp.name,
+    isAttending: rsvp.is_attending,
+    adults: rsvp.adults,
+    children: rsvp.children,
+    childrenAges: rsvp.children_ages || "",
+    createdAt: rsvp.created_at,
+  }));
+}
+
 const app = express();
 const PORT = 3000;
-const DB_PATH = path.join(process.cwd(), "data", "db.json");
 
-// Ensure DB directory and file exist
-function initializeDB() {
-  const dir = path.dirname(DB_PATH);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-  if (!fs.existsSync(DB_PATH)) {
-    const defaultData = {
-      config: {
-        partyDate: "2026-07-25",
-        partyTime: "18:00",
-        address: "R. Major Martins, 208 - Parque dos Sabiás, Rio Branco - AC, 69903-007",
-        rsvpDeadline: "2026-07-01",
-        clothingSize: "1 ou 2",
-        shoeSize: "19",
-        diaperSize: "XG",
-        pixKey: "ewerton.bezerra.silva@gmail.com",
-        photos: [
-          {
-            id: "1",
-            url: "/src/assets/images/baby_hazael_portrait_1779399080097.png",
-            caption: "Hazael Oliveira Silva - 1 Aninho"
-          }
-        ]
-      },
-      rsvps: []
-    };
-    fs.writeFileSync(DB_PATH, JSON.stringify(defaultData, null, 2), "utf8");
-  }
-}
-
-initializeDB();
-
-// Read DB helper
-function readDB() {
-  try {
-    initializeDB();
-    const raw = fs.readFileSync(DB_PATH, "utf8");
-    return JSON.parse(raw);
-  } catch (err) {
-    console.error("Error reading database:", err);
-    return { config: {}, rsvps: [] };
-  }
-}
-
-// Write DB helper
-function writeDB(data: any) {
-  try {
-    fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2), "utf8");
-  } catch (err) {
-    console.error("Error writing database:", err);
-  }
-}
-
-// Support large JSON payloads for base64 photo uploads
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
-// --- API ENDPOINTS ---
+async function requireAdminAuth(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+  try {
+    const authorization = req.headers.authorization;
+    const accessToken = authorization?.startsWith("Bearer ") ? authorization.slice(7) : null;
 
-// GET config
-app.get("/api/config", (req, res) => {
-  const db = readDB();
-  res.json(db.config);
-});
+    if (!accessToken) {
+      return res.status(401).json({ error: "Autenticação obrigatória." });
+    }
 
-// POST config
-app.post("/api/config", (req, res) => {
-  const db = readDB();
-  db.config = { ...db.config, ...req.body };
-  writeDB(db);
-  res.json({ success: true, config: db.config });
-});
+    const authClient = getSupabaseAuthClient(accessToken);
+    const {
+      data: { user },
+      error,
+    } = await authClient.auth.getUser();
 
-// GET RSVPs
-app.get("/api/rsvps", (req, res) => {
-  const db = readDB();
-  res.json(db.rsvps);
-});
+    if (error || !user) {
+      return res.status(401).json({ error: "Sessão inválida ou expirada." });
+    }
 
-// POST RSVP (for guests or manual entries)
-app.post("/api/rsvps", (req, res) => {
-  const { name, isAttending, adults, children, childrenAges } = req.body;
-  if (!name) {
-    return res.status(400).json({ error: "Nome completo é obrigatório." });
+    req.supabaseUser = {
+      id: user.id,
+      email: user.email,
+    };
+
+    next();
+  } catch (error: any) {
+    res.status(401).json({ error: error.message || "Não foi possível validar a autenticação." });
   }
+}
 
-  const db = readDB();
-  const newRsvp = {
-    id: Date.now().toString(),
-    name: name.trim(),
-    isAttending: Boolean(isAttending),
-    adults: isAttending ? parseInt(adults || "1", 10) : 0,
-    children: isAttending ? parseInt(children || "0", 10) : 0,
-    childrenAges: isAttending ? (childrenAges || "").trim() : "",
-    createdAt: new Date().toISOString()
-  };
-
-  db.rsvps.push(newRsvp);
-  writeDB(db);
-
-  res.status(201).json({ success: true, rsvp: newRsvp });
-});
-
-// DELETE RSVP
-app.delete("/api/rsvps/:id", (req, res) => {
-  const { id } = req.params;
-  const db = readDB();
-  const initialLength = db.rsvps.length;
-  db.rsvps = db.rsvps.filter((item: any) => item.id !== id);
-  
-  if (db.rsvps.length === initialLength) {
-    return res.status(404).json({ error: "Presença não encontrada." });
+app.get("/api/config", async (_req, res) => {
+  try {
+    const config = await fetchConfig();
+    res.json(config);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
   }
-  
-  writeDB(db);
-  res.json({ success: true });
 });
 
-// POST Photo upload (Base64)
-app.post("/api/photos", (req, res) => {
-  const { url, caption, month } = req.body;
-  if (!url) {
-    return res.status(400).json({ error: "URL ou conteúdo da imagem em base64 é necessário." });
+app.post("/api/config", requireAdminAuth, async (req, res) => {
+  try {
+    const payload = { ...req.body };
+    const currentConfig = await fetchConfig();
+    let mainPhotoUrl = payload.mainPhoto;
+
+    if (isDataUrl(payload.mainPhoto)) {
+      const uploaded = await uploadDataUrlImage(payload.mainPhoto, "main");
+      mainPhotoUrl = uploaded.publicUrl;
+    }
+
+    const updatePayload = {
+      id: "primary",
+      party_date: payload.partyDate ?? currentConfig.partyDate,
+      party_time: payload.partyTime ?? currentConfig.partyTime,
+      address: payload.address ?? currentConfig.address,
+      rsvp_deadline: payload.rsvpDeadline ?? currentConfig.rsvpDeadline,
+      clothing_size: payload.clothingSize ?? currentConfig.clothingSize,
+      shoe_size: payload.shoeSize ?? currentConfig.shoeSize,
+      diaper_size: payload.diaperSize ?? currentConfig.diaperSize,
+      pix_key: payload.pixKey ?? currentConfig.pixKey,
+      main_photo_url: mainPhotoUrl ?? currentConfig.mainPhoto ?? null,
+    };
+
+    const { error } = await getSupabaseClient().from("party_config").upsert(updatePayload, { onConflict: "id" });
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    res.json({ success: true, config: await fetchConfig() });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
   }
-
-  const db = readDB();
-  const newPhoto = {
-    id: Date.now().toString(),
-    url: url, // Contains base64 Data URL
-    caption: (caption || "").trim() || "Nova foto do Hazael!",
-    month: month || "Geral"
-  };
-
-  db.config.photos = db.config.photos || [];
-  db.config.photos.push(newPhoto);
-  writeDB(db);
-
-  res.status(201).json({ success: true, photo: newPhoto });
 });
 
-// POST AI Caption generator from Image Base64 (Using Gemini 3.5 Flash server-side)
-app.post("/api/photos/ai-caption", async (req, res) => {
+app.get("/api/rsvps", async (_req, res) => {
+  try {
+    res.json(await fetchRsvps());
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/rsvps", async (req, res) => {
+  try {
+    const { name, isAttending, adults, children, childrenAges } = req.body;
+    if (!name) {
+      return res.status(400).json({ error: "Nome completo é obrigatório." });
+    }
+
+    const insertPayload = {
+      name: String(name).trim(),
+      is_attending: Boolean(isAttending),
+      adults: Boolean(isAttending) ? parseInt(adults || "1", 10) : 0,
+      children: Boolean(isAttending) ? parseInt(children || "0", 10) : 0,
+      children_ages: Boolean(isAttending) ? String(childrenAges || "").trim() : "",
+    };
+
+    const { data, error } = await getSupabaseClient()
+      .from("party_rsvps")
+      .insert(insertPayload)
+      .select("*")
+      .single<RsvpRow>();
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    res.status(201).json({
+      success: true,
+      rsvp: {
+        id: data.id,
+        name: data.name,
+        isAttending: data.is_attending,
+        adults: data.adults,
+        children: data.children,
+        childrenAges: data.children_ages || "",
+        createdAt: data.created_at,
+      },
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete("/api/rsvps/:id", requireAdminAuth, async (req, res) => {
+  try {
+    const { error, count } = await getSupabaseClient()
+      .from("party_rsvps")
+      .delete({ count: "exact" })
+      .eq("id", req.params.id);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+    if (!count) {
+      return res.status(404).json({ error: "Presença não encontrada." });
+    }
+
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/photos", requireAdminAuth, async (req, res) => {
+  try {
+    const { url, caption, month } = req.body;
+    if (!url) {
+      return res.status(400).json({ error: "URL ou conteúdo da imagem em base64 é necessário." });
+    }
+
+    let publicUrl = String(url);
+    let storagePath: string | null = null;
+    if (isDataUrl(publicUrl)) {
+      const uploaded = await uploadDataUrlImage(publicUrl, "gallery");
+      publicUrl = uploaded.publicUrl;
+      storagePath = uploaded.path;
+    }
+
+    const { data: latestPhoto } = await getSupabaseClient()
+      .from("party_photos")
+      .select("sort_order")
+      .order("sort_order", { ascending: false })
+      .limit(1)
+      .maybeSingle<{ sort_order: number }>();
+
+    const { data, error } = await getSupabaseClient()
+      .from("party_photos")
+      .insert({
+        url: publicUrl,
+        caption: String(caption || "").trim() || "Nova foto do Hazael!",
+        month: month || "Geral",
+        storage_path: storagePath,
+        sort_order: (latestPhoto?.sort_order || 0) + 1,
+      })
+      .select("*")
+      .single<PhotoRow>();
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    res.status(201).json({
+      success: true,
+      photo: {
+        id: data.id,
+        url: data.url,
+        caption: data.caption,
+        month: data.month || undefined,
+      },
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post("/api/photos/ai-caption", requireAdminAuth, async (req, res) => {
   const { url, month } = req.body;
 
   if (!url) {
     return res.status(400).json({ error: "O conteúdo da imagem em base64 é necessário." });
   }
 
-  // Gracefully handle missing GEMINI_API_KEY
   if (!process.env.GEMINI_API_KEY) {
     return res.status(500).json({
-      error: "O serviço de Inteligência Artificial do Google Gemini não está configurado. Por favor, cadastre a GEMINI_API_KEY nas Configurações (Secrets)."
+      error: "O serviço de Inteligência Artificial do Google Gemini não está configurado. Cadastre a GEMINI_API_KEY.",
     });
   }
 
   try {
     const aiClient = getGeminiClient();
-
-    // Extract raw base64 data and mimeType
-    let base64Data = url;
-    let mimeType = "image/jpeg";
-    if (base64Data.startsWith("data:")) {
-      const mimeMatch = base64Data.match(/^data:([^;]+);base64,/);
-      if (mimeMatch) {
-         mimeType = mimeMatch[1];
-      }
-      const commaIndex = base64Data.indexOf(",");
-      if (commaIndex !== -1) {
-         base64Data = base64Data.substring(commaIndex + 1);
-      }
-    }
+    const { mimeType, buffer } = parseDataUrl(url);
 
     const promptText = `Você é um assistente simpático especializado em criar legendas curtas, fofas, afetivas e altamente personalizadas para as fotos do mural de crescimento do bebê Hazael Oliveira Silva (que está completando 1 aninho).
-    O usuário selecionou uma foto e associou ao período/mês de crescimento: "${month || "Geral"}".
-    
-    Analise a imagem anexada (repare na sua fofura, expressão, o que ele está fazendo, roupinhas ou brinquedos envolvidos) e escreva uma legenda calorosa em formato de frase curta sob a perspectiva do olhar orgulhoso e bobo dos pais, ou como um recadinho fofo.
-    
-    REGRAS RÍGIDAS DE GERAÇÃO:
-    - Retorne apenas a legenda gerada puro texto, SEM aspas ao redor, sem cabeçalhos ou explicações adicionais.
-    - O texto gerado deve ter no máximo 1 ou 2 frases curtas (máximo 120 caracteres totais) para caber bem no card.
-    - Se o período for diferente de "Geral", faça uma referência carinhosa a essa fase (ex: se for '3º mês', fale sobre 'com 3 meses', 'nossos 3 mesinhos', etc.).
-    - Escreva estritamente em português (do Brasil). Use emojis condizentes de forma fofinha.`;
+O usuário selecionou uma foto e associou ao período/mês de crescimento: "${month || "Geral"}".
+
+Analise a imagem anexada e escreva uma legenda calorosa em formato de frase curta sob a perspectiva do olhar orgulhoso e bobo dos pais.
+
+REGRAS:
+- Retorne apenas a legenda gerada em texto puro.
+- O texto deve ter no máximo 120 caracteres.
+- Se o período for diferente de "Geral", faça referência carinhosa a essa fase.
+- Escreva em português do Brasil e use emojis leves quando fizer sentido.`;
 
     const response = await aiClient.models.generateContent({
       model: "gemini-3.5-flash",
       contents: [
         {
           inlineData: {
-            mimeType: mimeType,
-            data: base64Data,
+            mimeType,
+            data: buffer.toString("base64"),
           },
         },
         promptText,
       ],
     });
 
-    const caption = response.text ? response.text.trim() : "Sorriso inesquecível do nosso Baby Hazael! ✨";
-    res.json({ success: true, caption });
+    res.json({
+      success: true,
+      caption: response.text ? response.text.trim() : "Sorriso inesquecível do nosso Baby Hazael! ✨",
+    });
   } catch (error: any) {
-    console.error("Erro ao gerar legenda com Gemini:", error);
     res.status(500).json({ error: "Erro ao consultar a IA da Google: " + error.message });
   }
 });
 
-// DELETE Photo
-app.delete("/api/photos/:id", (req, res) => {
-  const { id } = req.params;
-  const db = readDB();
-  if (db.config.photos) {
-    db.config.photos = db.config.photos.filter((pic: any) => pic.id !== id);
-    writeDB(db);
-    res.json({ success: true });
-  } else {
-    res.status(404).json({ error: "Nenhuma foto encontrada." });
+app.patch("/api/photos/:id", requireAdminAuth, async (req, res) => {
+  try {
+    const { caption, month, url } = req.body;
+    const client = getSupabaseClient();
+    const { data: currentPhoto, error: selectError } = await client
+      .from("party_photos")
+      .select("id, url, caption, month, storage_path")
+      .eq("id", req.params.id)
+      .maybeSingle<{ id: string; url: string; caption: string; month: string | null; storage_path: string | null }>();
+
+    if (selectError) {
+      throw new Error(selectError.message);
+    }
+    if (!currentPhoto) {
+      return res.status(404).json({ error: "Foto não encontrada." });
+    }
+
+    const replacedPhoto = await replaceStoredPhoto(currentPhoto.storage_path, url);
+    const { data, error } = await client
+      .from("party_photos")
+      .update({
+        caption: String(caption || currentPhoto.caption).trim() || currentPhoto.caption,
+        month: String(month || currentPhoto.month || "Geral"),
+        url: replacedPhoto.publicUrl || currentPhoto.url,
+        storage_path: replacedPhoto.storagePath,
+      })
+      .eq("id", req.params.id)
+      .select("*")
+      .single<PhotoRow>();
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    res.json({
+      success: true,
+      photo: {
+        id: data.id,
+        url: data.url,
+        caption: data.caption,
+        month: data.month || undefined,
+      },
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
   }
 });
 
-// GET Export RSVP to CSV (excel friendly with UTF-8 BOM)
-app.get("/api/rsvps/export", (req, res) => {
-  const db = readDB();
-  const rsvps = db.rsvps;
+app.delete("/api/photos/:id", requireAdminAuth, async (req, res) => {
+  try {
+    const { data: photo, error: selectError } = await getSupabaseClient()
+      .from("party_photos")
+      .select("id, storage_path")
+      .eq("id", req.params.id)
+      .maybeSingle<{ id: string; storage_path: string | null }>();
 
-  // Let's create CSV headers and lines
-  const csvHeaders = "Nome,Confirmou presenca?,Adultos,Criancas,Idades das Criancas,Data de Confirmacao\n";
-  const csvRows = rsvps.map((r: any) => {
-    const escapedName = `"${r.name.replace(/"/g, '""')}"`;
-    const yesNo = r.isAttending ? "Sim" : "Não";
-    const escapedAges = `"${(r.childrenAges || "").replace(/"/g, '""')}"`;
-    const dateFormatted = new Date(r.createdAt).toLocaleString("pt-BR", { timeZone: "America/Rio_Branco" });
-    return `${escapedName},${yesNo},${r.adults},${r.children},${escapedAges},"${dateFormatted}"`;
-  }).join("\n");
+    if (selectError) {
+      throw new Error(selectError.message);
+    }
+    if (!photo) {
+      return res.status(404).json({ error: "Foto não encontrada." });
+    }
 
-  const csvContent = "\uFEFF" + csvHeaders + csvRows; // Add UTF-8 BOM for Excel compatibility
+    const { error: deleteError } = await getSupabaseClient().from("party_photos").delete().eq("id", req.params.id);
+    if (deleteError) {
+      throw new Error(deleteError.message);
+    }
 
-  res.setHeader("Content-Type", "text/csv; charset=utf-8");
-  res.setHeader("Content-Disposition", "attachment; filename=convidados_hazael.csv");
-  res.send(csvContent);
+    await removeStoredPhoto(photo.storage_path);
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
-// --- VITE MIDDLEWARE SETUP ---
+app.get("/api/rsvps/export", requireAdminAuth, async (_req, res) => {
+  try {
+    const rsvps = await fetchRsvps();
+    const csvHeaders = "Nome,Confirmou presenca?,Adultos,Criancas,Idades das Criancas,Data de Confirmacao\n";
+    const csvRows = rsvps
+      .map((r) => {
+        const escapedName = `"${r.name.replace(/"/g, '""')}"`;
+        const yesNo = r.isAttending ? "Sim" : "Não";
+        const escapedAges = `"${(r.childrenAges || "").replace(/"/g, '""')}"`;
+        const dateFormatted = new Date(r.createdAt).toLocaleString("pt-BR", { timeZone: "America/Rio_Branco" });
+        return `${escapedName},${yesNo},${r.adults},${r.children},${escapedAges},"${dateFormatted}"`;
+      })
+      .join("\n");
+
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", "attachment; filename=convidados_hazael.csv");
+    res.send("\uFEFF" + csvHeaders + csvRows);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
@@ -279,7 +603,7 @@ async function startServer() {
   } else {
     const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
-    app.get("*", (req, res) => {
+    app.get("*", (_req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
     });
   }
