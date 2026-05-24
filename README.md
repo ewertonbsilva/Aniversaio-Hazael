@@ -40,6 +40,7 @@ VITE_SUPABASE_PUBLISHABLE_KEY="sb_publishable_xxx"
 Notas:
 
 - `VITE_SUPABASE_URL` e `VITE_SUPABASE_PUBLISHABLE_KEY` são usados no login do painel via browser.
+- No deploy da Vercel, o backend também aceita fallback dessas variáveis `VITE_*` caso `SUPABASE_URL` e `SUPABASE_PUBLISHABLE_KEY` não tenham sido configuradas separadamente.
 - `SUPABASE_SERVICE_ROLE_KEY` é opcional, mas recomendado para operações administrativas no backend.
 - Sem `GEMINI_API_KEY`, o recurso de legenda automática por IA não funciona.
 
