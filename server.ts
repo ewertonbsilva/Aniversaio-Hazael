@@ -244,7 +244,7 @@ async function fetchRsvps() {
   }));
 }
 
-const app = express();
+export const app = express();
 const PORT = 3000;
 
 app.use(express.json({ limit: "50mb" }));
@@ -593,7 +593,7 @@ app.get("/api/rsvps/export", requireAdminAuth, async (_req, res) => {
   }
 });
 
-async function startServer() {
+export async function startServer() {
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -613,4 +613,9 @@ async function startServer() {
   });
 }
 
-startServer();
+const isVercel = Boolean(process.env.VERCEL);
+const isDirectExecution = process.argv[1] && process.argv[1].includes("server");
+
+if (!isVercel && isDirectExecution) {
+  startServer();
+}

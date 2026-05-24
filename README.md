@@ -72,6 +72,15 @@ npm run build
 npm run start
 ```
 
+## Deploy na Vercel
+
+O projeto agora inclui:
+
+- [vercel.json](/C:/APPs/Aniversario%20Hazael/vercel.json) para rewrite do SPA
+- [api/index.ts](/C:/APPs/Aniversario%20Hazael/api/index.ts) como entrypoint serverless das rotas `/api/*`
+
+Se o frontend subir sem a API, a Vercel vai retornar `404` em rotas como `/api/config` e `/api/rsvps`. Essa configuração existe justamente para evitar esse problema.
+
 ## Painel administrativo
 
 O acesso ao painel é autenticado com `Supabase Auth` por e-mail e senha.
