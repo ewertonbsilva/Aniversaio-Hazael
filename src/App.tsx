@@ -15,6 +15,8 @@ export default function App() {
   const [showAdmin, setShowAdmin] = useState(false);
   const [videoMuted, setVideoMuted] = useState(true);
   const backgroundVideoRef = useRef<HTMLVideoElement | null>(null);
+  const videoMutedRef = useRef(true);
+  const audioInteractionHandledRef = useRef(false);
 
   // Fetch all database records
   const loadData = async () => {
@@ -45,20 +47,38 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const activateVideoAudioOnFirstInteraction = async () => {
-      const videoElement = backgroundVideoRef.current;
-      if (!videoElement || !videoMuted) {
-        return;
-      }
+    videoMutedRef.current = videoMuted;
+  }, [videoMuted]);
 
-      setVideoMuted(false);
-      videoElement.muted = false;
+  const setVideoAudioMutedState = async (muted: boolean) => {
+    const videoElement = backgroundVideoRef.current;
+    videoMutedRef.current = muted;
+    setVideoMuted(muted);
 
+    if (!videoElement) {
+      return;
+    }
+
+    videoElement.muted = muted;
+
+    if (!muted) {
       try {
         await videoElement.play();
       } catch (error) {
-        console.error("Nao foi possivel iniciar o audio automaticamente apos a interacao:", error);
+        console.error("Nao foi possivel ativar o audio do video:", error);
       }
+    }
+  };
+
+  useEffect(() => {
+    const activateVideoAudioOnFirstInteraction = async () => {
+      const videoElement = backgroundVideoRef.current;
+      if (!videoElement || audioInteractionHandledRef.current || !videoMutedRef.current) {
+        return;
+      }
+
+      audioInteractionHandledRef.current = true;
+      await setVideoAudioMutedState(false);
     };
 
     const interactionEvents: Array<keyof WindowEventMap> = ["pointerdown", "touchstart"];
@@ -71,26 +91,11 @@ export default function App() {
         window.removeEventListener(eventName, activateVideoAudioOnFirstInteraction);
       });
     };
-  }, [videoMuted]);
+  }, []);
 
   const toggleVideoAudio = async () => {
-    const nextMutedValue = !videoMuted;
-    setVideoMuted(nextMutedValue);
-
-    const videoElement = backgroundVideoRef.current;
-    if (!videoElement) {
-      return;
-    }
-
-    videoElement.muted = nextMutedValue;
-
-    if (!nextMutedValue) {
-      try {
-        await videoElement.play();
-      } catch (error) {
-        console.error("Nao foi possivel ativar o audio do video:", error);
-      }
-    }
+    audioInteractionHandledRef.current = true;
+    await setVideoAudioMutedState(!videoMutedRef.current);
   };
 
   // Helper inside PT-BR for party date
