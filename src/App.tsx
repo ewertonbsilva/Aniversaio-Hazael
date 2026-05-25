@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Sparkles, MapPin, Calendar, Clock, Heart, Sliders, Settings } from "lucide-react";
 import { PartyConfig, RsvpEntry } from "./types";
 import Countdown from "./components/Countdown";
@@ -6,12 +6,15 @@ import RsvpForm from "./components/RsvpForm";
 import Gifts from "./components/Gifts";
 import Gallery from "./components/Gallery";
 import AdminPanel from "./components/AdminPanel";
+import babyLooneyTunesVideo from "../Baby-Looney-Tunes.mp4";
 
 export default function App() {
   const [config, setConfig] = useState<PartyConfig | null>(null);
   const [rsvps, setRsvps] = useState<RsvpEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdmin, setShowAdmin] = useState(false);
+  const [videoMuted, setVideoMuted] = useState(true);
+  const backgroundVideoRef = useRef<HTMLVideoElement | null>(null);
 
   // Fetch all database records
   const loadData = async () => {
@@ -40,6 +43,26 @@ export default function App() {
   useEffect(() => {
     document.title = "Aniversário do Hazael";
   }, []);
+
+  const toggleVideoAudio = async () => {
+    const nextMutedValue = !videoMuted;
+    setVideoMuted(nextMutedValue);
+
+    const videoElement = backgroundVideoRef.current;
+    if (!videoElement) {
+      return;
+    }
+
+    videoElement.muted = nextMutedValue;
+
+    if (!nextMutedValue) {
+      try {
+        await videoElement.play();
+      } catch (error) {
+        console.error("Nao foi possivel ativar o audio do video:", error);
+      }
+    }
+  };
 
   // Helper inside PT-BR for party date
   const formatPartyDateLong = (dateStr: string) => {
@@ -87,6 +110,29 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#FDFCF8] text-gray-800 font-sans relative pb-12 select-none overflow-x-hidden" id="guest-root">
+      <div className="fixed inset-0 z-0 overflow-hidden">
+        <video
+          ref={backgroundVideoRef}
+          autoPlay
+          loop
+          muted={videoMuted}
+          playsInline
+          className="h-full w-full object-cover"
+        >
+          <source src={babyLooneyTunesVideo} type="video/mp4" />
+        </video>
+        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(253,252,248,0.16)_0%,rgba(253,252,248,0.58)_38%,rgba(253,252,248,0.88)_100%)]" />
+      </div>
+
+      <div className="fixed bottom-4 right-4 z-20">
+        <button
+          type="button"
+          onClick={toggleVideoAudio}
+          className="rounded-full border border-white/70 bg-white/85 px-4 py-2 text-xs font-black uppercase tracking-wider text-sky-900 shadow-lg backdrop-blur-sm"
+        >
+          {videoMuted ? "Ativar som" : "Desativar som"}
+        </button>
+      </div>
       
       {/* BACKGROUND FLOATING ELEMENTS */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden z-0">
