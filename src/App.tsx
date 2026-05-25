@@ -331,11 +331,12 @@ export default function App() {
           {/* ==========================================================
               SEÇÃO: PREFERÊNCIAS DE TAMANHO & PRESENTES (AMARELO)
               ========================================================== */}
-          <section id="sizes-section" className="w-full">
+          <section id="sizes-section" className="order-2 w-full">
             <Gifts
-              clothingSize={config.clothingSize || "1 ou 2"}
-              shoeSize={config.shoeSize || "19"}
-              diaperSize={config.diaperSize || "XG"}
+              clothingSize="2 anos"
+              shoeSize="22"
+              toySuggestion="Interativos"
+              giftNote="Uma dica carinhosa: amamos looks mais moderninhos, com cores neutras e estampas nao muito chamativas."
               pixKey={config.pixKey || "ewerton.bezerra.silva@gmail.com"}
             />
           </section>
@@ -343,14 +344,14 @@ export default function App() {
           {/* ==========================================================
               SEÇÃO: MURAL DE FOTOS / GALERIA DE FOTOS
               ========================================================== */}
-          <section id="photos-section" className="bg-white border-4 border-white rounded-[40px] p-6 sm:p-8 shadow-md">
+          <section id="photos-section" className="order-1 bg-white border-4 border-white rounded-[40px] p-6 sm:p-8 shadow-md">
             <Gallery photos={config.photos || []} />
           </section>
 
           {/* ==========================================================
               SEÇÃO: RODAPÉ DE AGRADECIMENTO
               ========================================================== */}
-          <footer className="bg-white rounded-[40px] border-4 border-[#BAE6FD] p-8 text-center space-y-6 relative overflow-hidden shadow-md">
+          <footer className="order-3 bg-white rounded-[40px] border-4 border-[#BAE6FD] p-8 text-center space-y-6 relative overflow-hidden shadow-md">
             {/* Custom bottom decorative color strip */}
             <div className="absolute bottom-0 left-0 right-0 h-3 bg-gradient-to-r from-sky-300 via-yellow-250 to-orange-200 opacity-80" />
 
