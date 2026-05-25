@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Sparkles, MapPin, Calendar, Clock, Heart, Sliders, Settings } from "lucide-react";
+import { Sparkles, MapPin, Calendar, Clock, Heart, Sliders, Settings, Volume2, VolumeX } from "lucide-react";
 import { PartyConfig, RsvpEntry } from "./types";
 import Countdown from "./components/Countdown";
 import RsvpForm from "./components/RsvpForm";
@@ -43,6 +43,35 @@ export default function App() {
   useEffect(() => {
     document.title = "Aniversário do Hazael";
   }, []);
+
+  useEffect(() => {
+    const activateVideoAudioOnFirstInteraction = async () => {
+      const videoElement = backgroundVideoRef.current;
+      if (!videoElement || !videoMuted) {
+        return;
+      }
+
+      setVideoMuted(false);
+      videoElement.muted = false;
+
+      try {
+        await videoElement.play();
+      } catch (error) {
+        console.error("Nao foi possivel iniciar o audio automaticamente apos a interacao:", error);
+      }
+    };
+
+    const interactionEvents: Array<keyof WindowEventMap> = ["pointerdown", "touchstart"];
+    interactionEvents.forEach((eventName) => {
+      window.addEventListener(eventName, activateVideoAudioOnFirstInteraction, { once: true });
+    });
+
+    return () => {
+      interactionEvents.forEach((eventName) => {
+        window.removeEventListener(eventName, activateVideoAudioOnFirstInteraction);
+      });
+    };
+  }, [videoMuted]);
 
   const toggleVideoAudio = async () => {
     const nextMutedValue = !videoMuted;
@@ -128,9 +157,30 @@ export default function App() {
         <button
           type="button"
           onClick={toggleVideoAudio}
-          className="rounded-full border border-white/70 bg-white/85 px-4 py-2 text-xs font-black uppercase tracking-wider text-sky-900 shadow-lg backdrop-blur-sm"
+          className={`group flex items-center gap-3 rounded-full border px-3 py-2.5 text-[11px] font-black uppercase tracking-[0.24em] shadow-[0_16px_45px_rgba(15,23,42,0.18)] backdrop-blur-md transition-all hover:scale-[1.02] active:scale-[0.98] ${
+            videoMuted
+              ? "border-white/80 bg-white/88 text-sky-900"
+              : "border-amber-200/90 bg-gradient-to-r from-amber-300 via-yellow-200 to-orange-200 text-amber-950"
+          }`}
+          aria-label={videoMuted ? "Ativar som do video" : "Desativar som do video"}
         >
-          {videoMuted ? "Ativar som" : "Desativar som"}
+          <span
+            className={`flex h-10 w-10 items-center justify-center rounded-full border shadow-sm transition-colors ${
+              videoMuted
+                ? "border-sky-100 bg-sky-50 text-sky-700"
+                : "border-amber-100 bg-white/80 text-amber-700"
+            }`}
+          >
+            {videoMuted ? <VolumeX className="h-4.5 w-4.5" /> : <Volume2 className="h-4.5 w-4.5" />}
+          </span>
+          <span className="flex flex-col items-start leading-none">
+            <span className="text-[9px] font-bold tracking-[0.28em] opacity-65">
+              Baby Looney Tunes
+            </span>
+            <span className="mt-1 tracking-[0.18em]">
+              {videoMuted ? "Ativar som" : "Som ligado"}
+            </span>
+          </span>
         </button>
       </div>
       

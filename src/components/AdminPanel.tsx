@@ -10,6 +10,12 @@ interface AdminPanelProps {
 }
 
 type AdminTab = "dashboard" | "edit-party" | "edit-gifts";
+type AdminToastTone = "success" | "error" | "warning";
+
+interface AdminToast {
+  message: string;
+  tone: AdminToastTone;
+}
 
 const MONTH_OPTIONS = [
   "Geral",
@@ -77,6 +83,7 @@ export default function AdminPanel({ config, rsvps, onRefreshData, onClose }: Ad
   const [editingMonth, setEditingMonth] = useState("Geral");
   const [editingPreviewBase64, setEditingPreviewBase64] = useState<string | null>(null);
   const [photoEditLoading, setPhotoEditLoading] = useState(false);
+  const [toast, setToast] = useState<AdminToast | null>(null);
 
   useEffect(() => {
     setPartyDate(config.partyDate || "");
@@ -118,6 +125,38 @@ export default function AdminPanel({ config, rsvps, onRefreshData, onClose }: Ad
     return () => {
       mounted = false;
       subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!toast) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => setToast(null), 3200);
+    return () => window.clearTimeout(timeoutId);
+  }, [toast]);
+
+  const showToast = (message: string, tone: AdminToastTone = "success") => {
+    setToast({ message, tone });
+  };
+
+  useEffect(() => {
+    const originalAlert = window.alert;
+
+    window.alert = (message?: string) => {
+      const text = String(message || "Acao concluida.");
+      const normalizedText = text.toLowerCase();
+      const tone = normalizedText.includes("sucesso")
+        ? "success"
+        : normalizedText.includes("selecione") || normalizedText.includes("muito pesada")
+          ? "warning"
+          : "error";
+      showToast(text, tone);
+    };
+
+    return () => {
+      window.alert = originalAlert;
     };
   }, []);
 
@@ -477,6 +516,47 @@ export default function AdminPanel({ config, rsvps, onRefreshData, onClose }: Ad
 
   return (
     <div className="fixed inset-0 bg-slate-100 z-50 flex flex-col overflow-hidden" id="admin-workbench">
+      {toast && (
+        <div className="pointer-events-none fixed right-4 top-4 z-[70] w-[min(92vw,360px)]">
+          <div
+            className={`overflow-hidden rounded-[28px] border px-4 py-4 shadow-[0_20px_60px_rgba(15,23,42,0.22)] backdrop-blur-md ${
+              toast.tone === "success"
+                ? "border-emerald-200 bg-white/92 text-emerald-950"
+                : toast.tone === "warning"
+                  ? "border-amber-200 bg-[#fff8e8]/96 text-amber-950"
+                  : "border-rose-200 bg-[#fff1f2]/96 text-rose-950"
+            }`}
+          >
+            <div className="flex items-start gap-3">
+              <div
+                className={`mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border text-lg ${
+                  toast.tone === "success"
+                    ? "border-emerald-100 bg-emerald-50"
+                    : toast.tone === "warning"
+                      ? "border-amber-100 bg-amber-50"
+                      : "border-rose-100 bg-rose-50"
+                }`}
+              >
+                {toast.tone === "success" ? "✓" : toast.tone === "warning" ? "!" : "×"}
+              </div>
+              <div className="min-w-0">
+                <p className="text-[10px] font-black uppercase tracking-[0.24em] opacity-60">
+                  {toast.tone === "success" ? "Concluido" : toast.tone === "warning" ? "Atencao" : "Aviso"}
+                </p>
+                <p className="mt-1 text-sm font-bold leading-5">{toast.message}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setToast(null)}
+                className="pointer-events-auto ml-auto rounded-full bg-black/5 px-2 py-1 text-[10px] font-black uppercase tracking-[0.18em] opacity-65 transition hover:bg-black/10"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <header className="bg-white border-b border-gray-200 py-3.5 px-4 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
           <span className="text-2xl select-none">🧸</span>
