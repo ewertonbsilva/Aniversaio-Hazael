@@ -1,6 +1,5 @@
 import express, { type NextFunction, type Request, type Response } from "express";
 import path from "path";
-import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import dotenv from "dotenv";
@@ -601,6 +600,7 @@ app.get("/api/rsvps/export", requireAdminAuth, async (_req, res) => {
 
 export async function startServer() {
   if (process.env.NODE_ENV !== "production") {
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
