@@ -9,7 +9,7 @@ interface AdminPanelProps {
   onClose: () => void;
 }
 
-type AdminTab = "dashboard" | "edit-party" | "edit-gifts";
+type AdminTab = "dashboard" | "edit-party" | "edit-gifts" | "layout";
 type AdminToastTone = "success" | "error" | "warning";
 
 interface AdminToast {
@@ -53,8 +53,11 @@ export default function AdminPanel({ config, rsvps, onRefreshData, onClose }: Ad
   const [address, setAddress] = useState(config.address || "");
   const [rsvpDeadline, setRsvpDeadline] = useState(config.rsvpDeadline || "");
   const [mainPhoto, setMainPhoto] = useState(config.mainPhoto || "");
+  const [displayMode, setDisplayMode] = useState<"full" | "minimal">(config.displayMode || "full");
   const [savePartyLoading, setSavePartyLoading] = useState(false);
   const [savePartySuccess, setSavePartySuccess] = useState(false);
+  const [saveLayoutLoading, setSaveLayoutLoading] = useState(false);
+  const [saveLayoutSuccess, setSaveLayoutSuccess] = useState(false);
 
   const [pixKey, setPixKey] = useState(config.pixKey || "");
   const [clothingSize, setClothingSize] = useState(config.clothingSize || "");
@@ -91,6 +94,7 @@ export default function AdminPanel({ config, rsvps, onRefreshData, onClose }: Ad
     setAddress(config.address || "");
     setRsvpDeadline(config.rsvpDeadline || "");
     setMainPhoto(config.mainPhoto || "");
+    setDisplayMode(config.displayMode || "full");
     setPixKey(config.pixKey || "");
     setClothingSize(config.clothingSize || "");
     setShoeSize(config.shoeSize || "");
@@ -241,6 +245,26 @@ export default function AdminPanel({ config, rsvps, onRefreshData, onClose }: Ad
       alert("Não foi possível salvar as alterações da festa.");
     } finally {
       setSavePartyLoading(false);
+    }
+  };
+
+  const saveLayoutDetails = async (e: FormEvent) => {
+    e.preventDefault();
+    setSaveLayoutLoading(true);
+    setSaveLayoutSuccess(false);
+    try {
+      const response = await authorizedFetch("/api/config", {
+        method: "POST",
+        body: JSON.stringify({ displayMode }),
+      });
+      if (!response.ok) throw new Error();
+      await onRefreshData();
+      setSaveLayoutSuccess(true);
+      setTimeout(() => setSaveLayoutSuccess(false), 3000);
+    } catch {
+      alert("Não foi possível salvar a escolha de layout.");
+    } finally {
+      setSaveLayoutLoading(false);
     }
   };
 
@@ -588,6 +612,7 @@ export default function AdminPanel({ config, rsvps, onRefreshData, onClose }: Ad
         {[
           { id: "dashboard", label: "Painel de convidados" },
           { id: "edit-party", label: "Info da festa" },
+          { id: "layout", label: "Layout da página" },
           { id: "edit-gifts", label: "Fotos e PIX" },
         ].map((tab) => (
           <button
@@ -727,6 +752,83 @@ export default function AdminPanel({ config, rsvps, onRefreshData, onClose }: Ad
 
                 <button type="submit" disabled={savePartyLoading} className="w-full bg-amber-400 hover:bg-amber-500 text-amber-950 py-3 rounded-xl font-fredoka font-bold text-sm shadow-md disabled:opacity-50 cursor-pointer">
                   {savePartyLoading ? "Salvando..." : savePartySuccess ? "Salvo com sucesso" : "Salvar informações"}
+                </button>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {activeTab === "layout" && (
+          <div className="max-w-3xl mx-auto">
+            <div className="bg-white rounded-3xl p-6 border border-gray-200 shadow-sm">
+              <h3 className="font-fredoka text-xl text-gray-800 mb-5">Escolha o Layout da Página Principal</h3>
+              <form onSubmit={saveLayoutDetails} className="space-y-4">
+                <div className="space-y-3">
+                  <label className="block text-[10px] font-bold text-gray-500 uppercase mb-3">Qual layout deseja mostrar?</label>
+
+                  <div className="grid md:grid-cols-2 gap-4">
+                    {/* FULL LAYOUT OPTION */}
+                    <div
+                      onClick={() => setDisplayMode("full")}
+                      className={`p-4 rounded-2xl border-2 cursor-pointer transition-all ${
+                        displayMode === "full"
+                          ? "border-amber-400 bg-amber-50"
+                          : "border-gray-200 bg-white hover:border-gray-300"
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className={`w-5 h-5 rounded border-2 flex items-center justify-center mt-0.5 ${
+                          displayMode === "full"
+                            ? "border-amber-400 bg-amber-400"
+                            : "border-gray-300 bg-white"
+                        }`}>
+                          {displayMode === "full" && <span className="text-white text-xs font-bold">✓</span>}
+                        </div>
+                        <div className="flex-1">
+                          <h4 className="font-bold text-gray-900 mb-1">Página Completa</h4>
+                          <p className="text-xs text-gray-600 leading-relaxed">
+                            Mostra todos os detalhes: cronômetro, fotos, RSVP, localização, presentes, tudo junto
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* MINIMAL LAYOUT OPTION */}
+                    <div
+                      onClick={() => setDisplayMode("minimal")}
+                      className={`p-4 rounded-2xl border-2 cursor-pointer transition-all ${
+                        displayMode === "minimal"
+                          ? "border-amber-400 bg-amber-50"
+                          : "border-gray-200 bg-white hover:border-gray-300"
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className={`w-5 h-5 rounded border-2 flex items-center justify-center mt-0.5 ${
+                          displayMode === "minimal"
+                            ? "border-amber-400 bg-amber-400"
+                            : "border-gray-300 bg-white"
+                        }`}>
+                          {displayMode === "minimal" && <span className="text-white text-xs font-bold">✓</span>}
+                        </div>
+                        <div className="flex-1">
+                          <h4 className="font-bold text-gray-900 mb-1">Cronômetro + Fotos</h4>
+                          <p className="text-xs text-gray-600 leading-relaxed">
+                            Versão minimalista: apenas o cronômetro e o carrossel de fotos
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-blue-50 border border-blue-100 rounded-2xl p-4 mt-6">
+                  <p className="text-xs text-blue-900 font-semibold">
+                    💡 <span className="ml-1">Ao salvar, a página principal será atualizada com a escolha acima.</span>
+                  </p>
+                </div>
+
+                <button type="submit" disabled={saveLayoutLoading} className="w-full bg-amber-400 hover:bg-amber-500 text-amber-950 py-3 rounded-xl font-fredoka font-bold text-sm shadow-md disabled:opacity-50 cursor-pointer">
+                  {saveLayoutLoading ? "Salvando..." : saveLayoutSuccess ? "Layout salvo com sucesso" : "Salvar layout"}
                 </button>
               </form>
             </div>

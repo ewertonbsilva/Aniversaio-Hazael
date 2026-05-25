@@ -6,6 +6,7 @@ import RsvpForm from "./components/RsvpForm";
 import Gifts from "./components/Gifts";
 import Gallery from "./components/Gallery";
 import AdminPanel from "./components/AdminPanel";
+import MinimalPage from "./components/MinimalPage";
 import babyLooneyTunesVideo from "../Baby-Looney-Tunes.mp4";
 
 export default function App() {
@@ -140,6 +141,11 @@ export default function App() {
         </div>
       </div>
     );
+  }
+
+  // Render minimal page if displayMode is set to minimal
+  if (config.displayMode === "minimal") {
+    return <MinimalPage config={config} rsvps={rsvps} onRefreshData={loadData} />;
   }
 
   return (

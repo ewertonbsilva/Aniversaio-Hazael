@@ -16,6 +16,7 @@ export interface PartyConfig {
   pixKey: string;
   photos: PhotoItem[];
   mainPhoto?: string;
+  displayMode?: "full" | "minimal";
 }
 
 export interface RsvpEntry {

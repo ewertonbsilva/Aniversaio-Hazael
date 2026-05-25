@@ -18,6 +18,7 @@ type ConfigRow = {
   diaper_size: string;
   pix_key: string;
   main_photo_url: string | null;
+  display_mode?: string | null;
 };
 
 type PhotoRow = {
@@ -218,6 +219,7 @@ async function fetchConfig() {
     diaperSize: configRow.diaper_size,
     pixKey: configRow.pix_key,
     mainPhoto: configRow.main_photo_url || undefined,
+    displayMode: (configRow.display_mode || "full") as "full" | "minimal",
     photos: (photoRows || []).map((photo) => ({
       id: photo.id,
       url: photo.url,
@@ -316,6 +318,7 @@ app.post("/api/config", requireAdminAuth, async (req, res) => {
       diaper_size: payload.diaperSize ?? currentConfig.diaperSize,
       pix_key: payload.pixKey ?? currentConfig.pixKey,
       main_photo_url: mainPhotoUrl ?? currentConfig.mainPhoto ?? null,
+      display_mode: payload.displayMode ?? currentConfig.displayMode ?? "full",
     };
 
     const { error } = await getSupabaseClient().from("party_config").upsert(updatePayload, { onConflict: "id" });
