@@ -42,6 +42,8 @@ type RsvpRow = {
 
 let ai: GoogleGenAI | null = null;
 let supabase: SupabaseClient | null = null;
+let supabaseAdmin: SupabaseClient | null = null;
+const GEMINI_CAPTION_MODEL = process.env.GEMINI_CAPTION_MODEL || "gemini-2.5-flash";
 
 type AuthenticatedRequest = Request & {
   supabaseUser?: {
@@ -117,6 +119,28 @@ function getSupabaseAuthClient(accessToken: string): SupabaseClient {
       },
     },
   });
+}
+
+function getSupabaseAdminClient(): SupabaseClient {
+  if (!supabaseAdmin) {
+    const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!url || !key) {
+      throw new Error(
+        "Supabase admin environment variables are missing. Define SUPABASE_URL or VITE_SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.",
+      );
+    }
+
+    supabaseAdmin = createClient(url, key, {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+      },
+    });
+  }
+
+  return supabaseAdmin;
 }
 
 function isDataUrl(value: string | null | undefined): value is string {
@@ -285,6 +309,21 @@ async function requireAdminAuth(req: AuthenticatedRequest, res: Response, next: 
   } catch (error: any) {
     res.status(401).json({ error: error.message || "Não foi possível validar a autenticação." });
   }
+}
+
+function requireCronAuth(req: Request, res: Response, next: NextFunction) {
+  const cronSecret = process.env.CRON_SECRET;
+  const authorization = req.headers.authorization;
+
+  if (!cronSecret) {
+    return res.status(500).json({ error: "CRON_SECRET nao configurado." });
+  }
+
+  if (authorization !== cronSecret && authorization !== `Bearer ${cronSecret}`) {
+    return res.status(401).json({ error: "Requisicao de cron nao autorizada." });
+  }
+
+  next();
 }
 
 app.get("/api/config", async (_req, res) => {
@@ -483,7 +522,7 @@ REGRAS:
 - Escreva em português do Brasil e use emojis leves quando fizer sentido.`;
 
     const response = await aiClient.models.generateContent({
-      model: "gemini-3.5-flash",
+      model: GEMINI_CAPTION_MODEL,
       contents: [
         {
           inlineData: {
@@ -500,7 +539,34 @@ REGRAS:
       caption: response.text ? response.text.trim() : "Sorriso inesquecível do nosso Baby Hazael! ✨",
     });
   } catch (error: any) {
-    res.status(500).json({ error: "Erro ao consultar a IA da Google: " + error.message });
+    res.status(500).json({ error: `Erro ao consultar a IA da Google (${GEMINI_CAPTION_MODEL}): ${error.message}` });
+  }
+});
+
+app.get("/api/cron/heartbeat", requireCronAuth, async (_req, res) => {
+  try {
+    const client = getSupabaseAdminClient();
+    const payload = {
+      id: "vercel-daily-heartbeat",
+      source: "vercel_cron",
+      last_run_at: new Date().toISOString(),
+      payload: {
+        status: "ok",
+        trigger: "daily-heartbeat",
+      },
+    };
+
+    const { error } = await client.schema("internal").from("project_heartbeat").upsert(payload, {
+      onConflict: "id",
+    });
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    res.json({ success: true, heartbeat: payload });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
   }
 });
 

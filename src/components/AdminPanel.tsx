@@ -17,6 +17,8 @@ interface AdminToast {
   tone: AdminToastTone;
 }
 
+const ADMIN_INACTIVITY_TIMEOUT_MS = 15 * 60 * 1000;
+
 const MONTH_OPTIONS = [
   "Geral",
   "Recém-nascido",
@@ -191,6 +193,46 @@ export default function AdminPanel({ config, rsvps, onRefreshData, onClose }: Ad
     setAccessToken(null);
     setPassword("");
   };
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      return;
+    }
+
+    let timeoutId = window.setTimeout(handleInactiveLogout, ADMIN_INACTIVITY_TIMEOUT_MS);
+
+    function resetInactivityTimeout() {
+      window.clearTimeout(timeoutId);
+      timeoutId = window.setTimeout(handleInactiveLogout, ADMIN_INACTIVITY_TIMEOUT_MS);
+    }
+
+    async function handleInactiveLogout() {
+      await supabase.auth.signOut();
+      setIsAuthenticated(false);
+      setAccessToken(null);
+      setPassword("");
+      showToast("Painel encerrado automaticamente por inatividade.", "warning");
+    }
+
+    const activityEvents: Array<keyof WindowEventMap> = [
+      "pointerdown",
+      "keydown",
+      "scroll",
+      "touchstart",
+      "mousemove",
+    ];
+
+    activityEvents.forEach((eventName) => {
+      window.addEventListener(eventName, resetInactivityTimeout, { passive: true });
+    });
+
+    return () => {
+      window.clearTimeout(timeoutId);
+      activityEvents.forEach((eventName) => {
+        window.removeEventListener(eventName, resetInactivityTimeout);
+      });
+    };
+  }, [isAuthenticated]);
 
   const handleImageFile = (file: File | undefined, setter: (value: string | null) => void) => {
     if (!file) {
