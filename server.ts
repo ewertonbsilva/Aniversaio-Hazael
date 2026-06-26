@@ -337,10 +337,12 @@ function isValidCronAuthorization(authorization: string | undefined) {
 
 async function runProjectHeartbeat() {
   const client = getSupabaseAdminClient();
+  const now = new Date();
+  const dayKey = now.toISOString().slice(0, 10);
   const payload = {
-    id: "vercel-daily-heartbeat",
+    id: `vercel-daily-heartbeat-${dayKey}`,
     source: "vercel_cron",
-    last_run_at: new Date().toISOString(),
+    last_run_at: now.toISOString(),
     payload: {
       status: "ok",
       trigger: "daily-heartbeat",
@@ -353,6 +355,13 @@ async function runProjectHeartbeat() {
 
   if (error) {
     throw new Error(error.message);
+  }
+
+  const retentionCutoff = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const { error: cleanupError } = await client.from("project_heartbeat").delete().lt("last_run_at", retentionCutoff);
+
+  if (cleanupError) {
+    throw new Error(cleanupError.message);
   }
 
   return payload;
