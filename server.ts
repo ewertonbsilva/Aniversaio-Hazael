@@ -326,6 +326,38 @@ function requireCronAuth(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
+function isValidCronAuthorization(authorization: string | undefined) {
+  const cronSecret = process.env.CRON_SECRET;
+  if (!cronSecret) {
+    return false;
+  }
+
+  return authorization === cronSecret || authorization === `Bearer ${cronSecret}`;
+}
+
+async function runProjectHeartbeat() {
+  const client = getSupabaseAdminClient();
+  const payload = {
+    id: "vercel-daily-heartbeat",
+    source: "vercel_cron",
+    last_run_at: new Date().toISOString(),
+    payload: {
+      status: "ok",
+      trigger: "daily-heartbeat",
+    },
+  };
+
+  const { error } = await client.schema("internal").from("project_heartbeat").upsert(payload, {
+    onConflict: "id",
+  });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+
+  return payload;
+}
+
 app.get("/api/config", async (_req, res) => {
   try {
     const config = await fetchConfig();
@@ -545,25 +577,7 @@ REGRAS:
 
 app.get("/api/cron/heartbeat", requireCronAuth, async (_req, res) => {
   try {
-    const client = getSupabaseAdminClient();
-    const payload = {
-      id: "vercel-daily-heartbeat",
-      source: "vercel_cron",
-      last_run_at: new Date().toISOString(),
-      payload: {
-        status: "ok",
-        trigger: "daily-heartbeat",
-      },
-    };
-
-    const { error } = await client.schema("internal").from("project_heartbeat").upsert(payload, {
-      onConflict: "id",
-    });
-
-    if (error) {
-      throw new Error(error.message);
-    }
-
+    const payload = await runProjectHeartbeat();
     res.json({ success: true, heartbeat: payload });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
@@ -694,3 +708,5 @@ const isDirectExecution = process.argv[1] && process.argv[1].includes("server");
 if (!isVercel && isDirectExecution) {
   startServer();
 }
+
+export { isValidCronAuthorization, runProjectHeartbeat };
