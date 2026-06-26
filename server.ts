@@ -347,7 +347,7 @@ async function runProjectHeartbeat() {
     },
   };
 
-  const { error } = await client.schema("internal").from("project_heartbeat").upsert(payload, {
+  const { error } = await client.from("project_heartbeat").upsert(payload, {
     onConflict: "id",
   });
 
